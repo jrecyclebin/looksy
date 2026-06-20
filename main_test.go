@@ -147,6 +147,7 @@ func TestLLMCommandWithModel(t *testing.T) {
 		{"pi", "sonnet", "--model sonnet"},
 		{"claude", "opus", "--model opus"},
 		{"gemini", "gemini-2.5-pro", "--model gemini-2.5-pro"},
+		{"ollama", "codellama", "codellama"},
 		{"opencode", "anthropic/sonnet", "--model anthropic/sonnet"},
 	}
 	for _, c := range cases {
@@ -155,6 +156,25 @@ func TestLLMCommandWithModel(t *testing.T) {
 		if !strings.Contains(joined, c.wantArg) {
 			t.Errorf("llmCommand(%q, %q) should contain %q, got: %s", c.tool, c.model, c.wantArg, joined)
 		}
+	}
+}
+
+func TestOllamaDefaultsModel(t *testing.T) {
+	_, args := llmCommand("ollama", "", "sys", "query")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "llama3") {
+		t.Errorf("ollama without model should default to llama3, got: %s", joined)
+	}
+}
+
+func TestOllamaPrependsSystem(t *testing.T) {
+	_, args := llmCommand("ollama", "mistral", "YOU ARE LOOKSY", "find auth")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "YOU ARE LOOKSY") {
+		t.Errorf("ollama should prepend system prompt to query, got: %s", joined)
+	}
+	if !strings.Contains(joined, "run mistral") {
+		t.Errorf("ollama should use 'run <model>', got: %s", joined)
 	}
 }
 

@@ -73,7 +73,7 @@ func main() {
 
 	// Parse remaining args as flags
 	fs := flag.NewFlagSet("looksy", flag.ExitOnError)
-	fs.StringVar(&flagLLM, "l", "", "LLM tool to use (pi, claude, gemini, opencode)")
+	fs.StringVar(&flagLLM, "l", "", "LLM tool to use (pi, claude, gemini, ollama, opencode)")
 	fs.StringVar(&flagModel, "m", "", "model name or alias to pass to the LLM tool")
 	fs.StringVar(&flagSearch, "s", "", "search tool to hint in prompt (rg, grep)")
 	fs.Parse(args)
@@ -106,7 +106,7 @@ func printHelp() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  -l string")
-	fmt.Fprintln(os.Stderr, "        LLM tool to use (pi, claude, gemini, opencode)")
+	fmt.Fprintln(os.Stderr, "        LLM tool to use (pi, claude, gemini, ollama, opencode)")
 	fmt.Fprintln(os.Stderr, "  -m string")
 	fmt.Fprintln(os.Stderr, "        model name or alias to pass to the LLM tool")
 	fmt.Fprintln(os.Stderr, "  -s string")
@@ -224,6 +224,11 @@ func llmCommand(tool, model, systemPrompt, query string) (string, []string) {
 			args = append([]string{"--model", model}, args...)
 		}
 		return "gemini", args
+	case "ollama":
+		if model == "" {
+			model = "llama3"
+		}
+		return "ollama", []string{"run", model, systemPrompt + "\n\n" + query}
 	case "opencode":
 		args := []string{"run"}
 		if model != "" {
@@ -245,13 +250,14 @@ func listModels(tool string) error {
 	var args []string
 	switch tool {
 	case "claude":
-		// Claude doesn't have a list-models command; tell the user
 		fmt.Fprintln(os.Stderr, "claude does not support --models. Use 'claude --model <alias>' with aliases like sonnet, opus, haiku.")
 		return nil
 	case "gemini":
-		// Gemini doesn't have a list-models command
 		fmt.Fprintln(os.Stderr, "gemini does not support --models. Use 'gemini -m <model>' with a model name.")
 		return nil
+	case "ollama":
+		name = "ollama"
+		args = []string{"list"}
 	case "opencode":
 		name = "opencode"
 		args = []string{"models"}
