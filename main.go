@@ -153,8 +153,8 @@ func buildPrompt(searchTool string) string {
 }
 
 const promptPreamble = "You are Looksy, an agent used to look at the files in\n" +
-	"the current working directory (CWD) and find all\n" +
-	"the relevant code references needed for the task. You do the footwork, to\n" +
+	"the current working directory (CWD) and find all the relevant code references.\n" +
+  "You are researching and planning for a specific prompt. You do the footwork, to\n" +
 	"walk through all the code, to map it well enough, to provide a guide that can be\n" +
 	"used to make the edits needed or for reading up on the basis for any new work.\n\n"
 
@@ -182,22 +182,22 @@ const searchSectionGrep = "Use grep for file searches. Some quick examples:\n\n"
 	"- `-c` for count of matches per file\n" +
 	"- `-C 2` for two lines of surrounding context\n\n"
 
-const promptPostamble = "Respond to the user's prompt with two XML blocks: 1) a <summary> block,\n" +
-	"containing an overview of the discoveries and any notes; and 2) a <references> block,\n" +
-	"containing the specific code references (one per line) using the format\n" +
-	"`path/to/file.ext:line-range`. Always use this exact format for the code\n" +
-	"references in this block.\n\n" +
-	"As an example:\n\n" +
+const promptPostamble = "Respond to the user's prompt with your findings, and include specific code\n" +
+	"references using the format `path/to/file.ext:line-range` — one per line,\n" +
+	"each optionally followed by a dash and a description. For example:\n\n" +
 	"```\n" +
-	"<references>\n" +
-	"handler.go:782-920 — `handleTaskExec` (full execution pipeline: multipart/JSON parsing, env vars, file uploads, shell exec, MCP-format response)\n" +
-	"handler.go:1978-2020 — `verifyTaskToken` (validates Bearer token against referenced auth service)\n" +
-	"web/frbr.js:250-310 — Tasks routing in ServiceProxy (`listTools`/`callTool` detect `tasks://` URL, `#callTask` for multipart support)\n" +
-	"</references>\n" +
+	"handler.go:782-920 — `handleTaskExec` (full execution pipeline)\n" +
+	"handler.go:1978-2020 — `verifyTaskToken` (validates Bearer token)\n" +
+	"web/frbr.js:250-310 — Tasks routing in ServiceProxy\n" +
 	"```\n\n" +
 	"Try to keep references focused to less than 200 lines. Unless you feel\n" +
-  "extensive context is truly needed.\n\n" +
-  "Make no edits to the code, just build the list of file references and you're done.\n"
+	"extensive context is truly needed.\n\n" +
+	"Make no edits to the code - don't touch any files - you are just in planning\n" +
+	"mode for this - just grab the file references and make a list for me.\n"
+
+const actualPrompt = "Here is the prompt you are researching:\n\n" +
+  "PROMPT\n\n" +
+  "When you are done, reply with your findings and list of file references.\n"
 
 // --- LLM invocation ---
 
@@ -214,14 +214,16 @@ func callLLM(tool, model, systemPrompt, query string) (string, error) {
 }
 
 func llmCommand(tool, model, systemPrompt, query string) (string, []string) {
+  blockquoted := "> " + strings.ReplaceAll(query, "\n", "\n> ")
+	fullPrompt := strings.Replace(actualPrompt, "PROMPT", blockquoted, 1)
 	switch tool {
 	case "claude":
 		if model == "" {
 			model = "haiku"
 		}
-		return "claude", []string{"--model", model, "--system-prompt", systemPrompt, "-p", query}
+		return "claude", []string{"--model", model, "--system-prompt", systemPrompt, "-p", fullPrompt}
 	case "gemini":
-		args := []string{"-p", systemPrompt + "\n\n" + query}
+		args := []string{"-p", systemPrompt + "\n\n" + fullPrompt}
 		if model != "" {
 			args = append([]string{"--model", model}, args...)
 		}
@@ -230,16 +232,16 @@ func llmCommand(tool, model, systemPrompt, query string) (string, []string) {
 		if model == "" {
 			model = "llama3"
 		}
-		return "ollama", []string{"run", model, systemPrompt + "\n\n" + query}
+		return "ollama", []string{"run", model, systemPrompt + "\n\n" + fullPrompt}
 	case "opencode":
 		args := []string{"run"}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
-		args = append(args, systemPrompt+"\n\n"+query)
+		args = append(args, systemPrompt+"\n\n"+fullPrompt)
 		return "opencode", args
 	default:
-		args := []string{"--exclude-tools", "edit,write", "--system-prompt", systemPrompt, "-p", query}
+		args := []string{"--exclude-tools", "edit,write", "--system-prompt", systemPrompt, "-p", fullPrompt}
 		if model != "" {
 			args = append([]string{"--model", model}, args...)
 		}
@@ -275,51 +277,56 @@ func listModels(tool string) error {
 
 // --- Output processing (the spy logic) ---
 
-var refLineRe = regexp.MustCompile(`^[\w./@-]+:\d+-\d+`)
+// refRe matches file references anywhere in a line, e.g.:
+//   main.go:77-90
+//   src/handler.go:42
+//   **`web/frbr.js:250-310`** - some description
+var refRe = regexp.MustCompile(`[\w./@-]+:\d+(-\d+)?`)
 
 func processOutput(w io.Writer, input string) {
-	summary := extractBlock(input, "summary")
-	if summary != "" {
-		fmt.Fprintln(w, summary)
-	}
+	// Print the LLM's response as-is
+	fmt.Fprint(w, input)
 
-	fmt.Fprintln(w, "<references>")
-
-	refsBlock := extractBlock(input, "references")
-	if refsBlock != "" {
-		scanner := bufio.NewScanner(strings.NewReader(refsBlock))
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !refLineRe.MatchString(line) {
-				continue
-			}
-			expandReference(w, line)
+	// Scan the entire response for file references and expand them
+	var refs []string
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	for scanner.Scan() {
+		line := scanner.Text()
+		for _, loc := range refRe.FindAllStringIndex(line, -1) {
+			ref := line[loc[0]:loc[1]]
+			comment := extractComment(line[loc[1]:])
+			refs = append(refs, ref+comment)
 		}
 	}
 
-	fmt.Fprintln(w, "</references>")
+	if len(refs) > 0 {
+		fmt.Fprintln(w, "\n---")
+		for _, ref := range refs {
+			expandReference(w, ref)
+		}
+	}
 }
 
-func extractBlock(input, tag string) string {
-	open := "<" + tag + ">"
-	close := "</" + tag + ">"
-	start := strings.Index(input, open)
-	if start == -1 {
-		return ""
+// extractComment looks for a dash separator ( - or —) in the text after a
+// file reference and returns everything following it, trimmed. Returns empty
+// string if no dash separator is found.
+func extractComment(after string) string {
+	// Try em-dash first, then space-hyphen-space
+	for _, sep := range []string{" — ", " - "} {
+		if idx := strings.Index(after, sep); idx != -1 {
+			return " " + strings.TrimSpace(after[idx+len(sep):])
+		}
 	}
-	start += len(open)
-	end := strings.Index(input, close)
-	if end == -1 || end < start {
-		return ""
-	}
-	return strings.TrimSpace(input[start:end])
+	return ""
 }
 
-func expandReference(w io.Writer, line string) {
-	ref := strings.SplitN(line, " ", 2)[0]
+func expandReference(w io.Writer, refWithComment string) {
+	// Split ref from comment (comment was appended after a space)
+	ref := refWithComment
 	comment := ""
-	if parts := strings.SplitN(line, " ", 2); len(parts) > 1 {
-		comment = " " + parts[1]
+	if idx := strings.IndexByte(refWithComment, ' '); idx != -1 {
+		ref = refWithComment[:idx]
+		comment = refWithComment[idx:] // includes leading space
 	}
 
 	parts := strings.SplitN(ref, ":", 2)
@@ -329,17 +336,24 @@ func expandReference(w io.Writer, line string) {
 	path := parts[0]
 	rangeStr := parts[1]
 
-	rangeParts := strings.SplitN(rangeStr, "-", 2)
-	if len(rangeParts) != 2 {
-		return
-	}
-	start, err := strconv.Atoi(rangeParts[0])
-	if err != nil {
-		return
-	}
-	end, err := strconv.Atoi(rangeParts[1])
-	if err != nil {
-		return
+	var start, end int
+	var err error
+	if strings.Contains(rangeStr, "-") {
+		rangeParts := strings.SplitN(rangeStr, "-", 2)
+		start, err = strconv.Atoi(rangeParts[0])
+		if err != nil {
+			return
+		}
+		end, err = strconv.Atoi(rangeParts[1])
+		if err != nil {
+			return
+		}
+	} else {
+		start, err = strconv.Atoi(rangeStr)
+		if err != nil {
+			return
+		}
+		end = start
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {

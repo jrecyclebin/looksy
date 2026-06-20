@@ -8,45 +8,42 @@ import (
 	"testing"
 )
 
-func TestExtractBlock(t *testing.T) {
-	input := "before <summary>hello world</summary> after"
-	got := extractBlock(input, "summary")
-	want := "hello world"
-	if got != want {
-		t.Errorf("extractBlock(summary) = %q, want %q", got, want)
-	}
-}
-
-func TestExtractBlockMissing(t *testing.T) {
-	got := extractBlock("no tags here", "summary")
-	if got != "" {
-		t.Errorf("expected empty string, got %q", got)
-	}
-}
-
-func TestExtractBlockReferences(t *testing.T) {
-	input := "<references>\nfoo.go:1-10 — desc\nbar.go:5-20 — other\n</references>"
-	got := extractBlock(input, "references")
-	if !strings.Contains(got, "foo.go:1-10") {
-		t.Errorf("missing foo.go reference, got %q", got)
-	}
-}
-
-func TestRefLineRe(t *testing.T) {
+func TestRefRe(t *testing.T) {
 	cases := []struct {
-		line   string
-		match  bool
+		line  string
+		match bool
 	}{
 		{"handler.go:782-920 — desc", true},
 		{"web/frbr.js:250-310 — desc", true},
 		{"some/path/file.ts:1-5", true},
+		{"main.go:77", true},
 		{"not a reference", false},
-		{"  handler.go:782-920", false}, // leading space
+		{"  handler.go:782-920", true}, // leading space is fine now — refs found anywhere
+		{"## 2. **`main.go:77`** - Update model flag help text", true},
 	}
 	for _, c := range cases {
-		got := refLineRe.MatchString(c.line)
+		got := refRe.MatchString(c.line)
 		if got != c.match {
-			t.Errorf("refLineRe.MatchString(%q) = %v, want %v", c.line, got, c.match)
+			t.Errorf("refRe.MatchString(%q) = %v, want %v", c.line, got, c.match)
+		}
+	}
+}
+
+func TestExtractComment(t *testing.T) {
+	cases := []struct {
+		after string
+		want  string
+	}{
+		{" — Update model flag help text", " Update model flag help text"},
+		{" - some description", " some description"},
+		{"** - Update the thing", " Update the thing"},
+		{"`**", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := extractComment(c.after)
+		if got != c.want {
+			t.Errorf("extractComment(%q) = %q, want %q", c.after, got, c.want)
 		}
 	}
 }
@@ -67,21 +64,21 @@ func TestProcessOutputWithFakeRefs(t *testing.T) {
 	tmpFile.WriteString(content.String())
 	tmpFile.Close()
 
-	input := "<summary>Found some stuff</summary>\n\n" +
-		"<references>\n" +
+	input := "Here is what I found:\n\n" +
 		tmpFile.Name() + ":3-7 — test range\n" +
-		"nonexistent.go:1-5 — missing file\n" +
-		"</references>"
+		"nonexistent.go:1-5 — missing file\n"
 
 	var buf bytes.Buffer
 	processOutput(&buf, input)
 	output := buf.String()
 
-	if !strings.Contains(output, "Found some stuff") {
-		t.Error("output missing summary")
+	// The full LLM response should be printed as-is
+	if !strings.Contains(output, "Here is what I found:") {
+		t.Error("output missing LLM response text")
 	}
-	if !strings.Contains(output, "<references>") {
-		t.Error("output missing <references> tag")
+	// The separator should appear before expanded refs
+	if !strings.Contains(output, "\n---\n") {
+		t.Error("output missing separator before expanded refs")
 	}
 	if !strings.Contains(output, "line 3") || !strings.Contains(output, "line 7") {
 		t.Error("output missing expanded file range")
@@ -107,9 +104,9 @@ func TestBuildPrompt(t *testing.T) {
 	if !strings.Contains(rg, "rg ") {
 		t.Error("rg prompt should have rg examples")
 	}
-	// Both should have the common postamble
-	if !strings.Contains(rg, "<references>") || !strings.Contains(grep, "<references>") {
-		t.Error("both prompts should contain the example references section")
+	// Both should have the common postamble with reference examples
+	if !strings.Contains(rg, "handler.go:782-920") || !strings.Contains(grep, "handler.go:782-920") {
+		t.Error("both prompts should contain example file references")
 	}
 }
 
@@ -251,6 +248,20 @@ func TestLoadConfig(t *testing.T) {
 	}
 	if os.Getenv("LOOKSY_SEARCH") != "grep" {
 		t.Errorf("LOOKSY_SEARCH = %q, want %q", os.Getenv("LOOKSY_SEARCH"), "grep")
+	}
+}
+
+func TestBlockquotedMultilineQuery(t *testing.T) {
+	query := "add a retry loop\nto the HTTP client"
+	_, args := llmCommand("pi", "", "sys", query)
+	joined := strings.Join(args, " ")
+
+	// Every line of the query should be blockquoted
+	if !strings.Contains(joined, "> add a retry loop") {
+		t.Errorf("first line should be blockquoted, got: %s", joined)
+	}
+	if !strings.Contains(joined, "\n> to the HTTP client") {
+		t.Errorf("second line should be blockquoted with > prefix, got: %s", joined)
 	}
 }
 
