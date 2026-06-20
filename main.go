@@ -311,7 +311,7 @@ func processOutput(w io.Writer, input string) {
 	}
 
 	if len(refs) > 0 {
-		fmt.Fprintln(w, "\n---\nFILE REFERENCES\nAll file content below is current - is the exact file data from each chunk. Provided here to limit the need for file reads.\n---\n")
+		fmt.Fprintln(w, "\n---\nFILE REFERENCES\nAll file content below is current - is the exact file data from each chunk. Provided here to limit the need for file reads.\n---")
 		for _, ref := range refs {
 			expandReference(w, ref)
 		}
