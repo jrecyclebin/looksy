@@ -10,25 +10,27 @@ Looksy then reads those EXACT lines of code and expands them fully in its
 response. This means that the agent doing the coding can have the pieces it
 needs without a bunch of irrelevant code in the way.
 
-  $ looksy "Add Codex support."
+```bash
+$ looksy "Add Codex support."
 
-  > **What needs to happen to add Codex support:**
-  > [...Steps the LLM suggests...]
-  >
-  > main.go:75-77 — `-l` flag definition with current help text
-  > [...more references from the LLM...]
-  >
-  > ---
-  >
-  > === main.go:75-77 — `-l` flag definition with current help text
-  > fs := flag.NewFlagSet("looksy", flag.ExitOnError)
-  > fs.StringVar(&flagLLM, "l", "", "LLM tool to use (pi, claude, gemini, ollama, opencode)")
-  > fs.StringVar(&flagModel, "m", "", "model name or alias to pass to the LLM tool")
-  >
-  > === main.go:207-240 — `llmCommand` with per-tool flag construction
-  > [...expanded file contents...]
-  >
-  > [...3 other expanded references...]
+**What needs to happen to add Codex support:**
+[...Steps the LLM suggests...]
+
+main.go:75-77 — `-l` flag definition with current help text
+[...more references from the LLM...]
+
+---
+
+=== main.go:75-77 — `-l` flag definition with current help text
+fs := flag.NewFlagSet("looksy", flag.ExitOnError)
+fs.StringVar(&flagLLM, "l", "", "LLM tool to use (pi, claude, gemini, ollama, opencode)")
+fs.StringVar(&flagModel, "m", "", "model name or alias to pass to the LLM tool")
+
+=== main.go:207-240 — `llmCommand` with per-tool flag construction
+[...expanded file contents...]
+
+[...3 other expanded references...]
+```
 
 The LLM's full response is printed as-is, then Looksy appends a `---`
 separator and expands every file reference it found into the actual source code.
@@ -39,11 +41,15 @@ have is Claude Code installed, it'll default to using Haiku.)
 
 You can also use flags to select the LLM and model you want to use:
 
-  $ looksy -l ollama -m "qwen3.5:2b" "Add Codex support."
+```bash
+$ looksy -l ollama -m "qwen3.5:2b" "Add Codex support."
+```
 
 If you need to list the available models for a given tool, you can do that too:
 
-  $ looksy -l ollama models
+```bash
+$ looksy -l ollama models
+```
 
 ## Using in Prompts
 
@@ -62,9 +68,9 @@ For example, save this at `~/.claude/commands/looksy.md`:
 
 > You have been tasked with the following prompt:
 >
-> <user-prompt>
+> \<user-prompt>
 > $ARGUMENTS
-> </user-prompt>
+> \</user-prompt>
 >
 > Before running that prompt, give it to Looksy to build a map of file
 > references. Use the following command: `looksy -l claude "[The above prompt]"`
