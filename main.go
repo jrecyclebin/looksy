@@ -83,6 +83,14 @@ func main() {
 	search := coalesce(flagSearch, os.Getenv("LOOKSY_SEARCH"), "rg")
 	model := coalesce(flagModel, os.Getenv("LOOKSY_MODEL"), "")
 
+	// Fall back to grep if the chosen search tool isn't on PATH
+	if _, err := exec.LookPath(search); err != nil {
+		if search != "grep" {
+			fmt.Fprintf(os.Stderr, "warning: %q not found on PATH, falling back to grep\n", search)
+		}
+		search = "grep"
+	}
+
 	switch command {
 	case "models":
 		if err := listModels(llm); err != nil {
@@ -184,7 +192,8 @@ const searchSectionGrep = "Use grep for file searches. Some quick examples:\n\n"
 
 const promptPostamble = "Respond to the user's prompt with your findings, and include specific code\n" +
 	"references using the format `path/to/file.ext:line-range` — one per line,\n" +
-	"each optionally followed by a dash and a description. For example:\n\n" +
+	"each optionally followed by a dash and a description. Surround them with a\n" +
+  "code block and keep them neatly arranged.\n\nFor example:\n\n" +
 	"```\n" +
 	"handler.go:782-920 — `handleTaskExec` (full execution pipeline)\n" +
 	"handler.go:1978-2020 — `verifyTaskToken` (validates Bearer token)\n" +
