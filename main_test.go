@@ -138,6 +138,25 @@ func TestLLMCommand(t *testing.T) {
 	}
 }
 
+func TestClaudeDefaultsHaiku(t *testing.T) {
+	_, args := llmCommand("claude", "", "sys", "query")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--model haiku") {
+		t.Errorf("claude without model should default to haiku, got: %s", joined)
+	}
+}
+
+func TestClaudeExplicitModel(t *testing.T) {
+	_, args := llmCommand("claude", "opus", "sys", "query")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--model opus") {
+		t.Errorf("claude with explicit model should use it, got: %s", joined)
+	}
+	if strings.Contains(joined, "haiku") {
+		t.Errorf("claude with explicit model should not contain haiku, got: %s", joined)
+	}
+}
+
 func TestLLMCommandWithModel(t *testing.T) {
 	cases := []struct {
 		tool    string

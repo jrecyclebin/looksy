@@ -148,10 +148,12 @@ func buildPrompt(searchTool string) string {
 	if searchTool == "grep" {
 		searchSection = searchSectionGrep
 	}
-	return promptPreamble + searchSection + promptPostamble
+	cwd, _ := os.Getwd()
+	return strings.Replace(promptPreamble, "CWD", cwd, 1) + searchSection + promptPostamble
 }
 
-const promptPreamble = "You are Looksy, an agent used to look at the current codebase and find all\n" +
+const promptPreamble = "You are Looksy, an agent used to look at the files in\n" +
+	"the current working directory (CWD) and find all\n" +
 	"the relevant code references needed for the task. You do the footwork, to\n" +
 	"walk through all the code, to map it well enough, to provide a guide that can be\n" +
 	"used to make the edits needed or for reading up on the basis for any new work.\n\n"
@@ -193,8 +195,9 @@ const promptPostamble = "Respond to the user's prompt with two XML blocks: 1) a 
 	"web/frbr.js:250-310 — Tasks routing in ServiceProxy (`listTools`/`callTool` detect `tasks://` URL, `#callTask` for multipart support)\n" +
 	"</references>\n" +
 	"```\n\n" +
-	"Try to keep references focused to less than 200 lines. Unless extensive context\n" +
-	"truly needed."
+	"Try to keep references focused to less than 200 lines. Unless you feel\n" +
+  "extensive context is truly needed.\n\n" +
+  "Make no edits to the code, just build the list of file references and you're done.\n"
 
 // --- LLM invocation ---
 
@@ -213,11 +216,10 @@ func callLLM(tool, model, systemPrompt, query string) (string, error) {
 func llmCommand(tool, model, systemPrompt, query string) (string, []string) {
 	switch tool {
 	case "claude":
-		args := []string{"--system-prompt", systemPrompt, "-p", query}
-		if model != "" {
-			args = append([]string{"--model", model}, args...)
+		if model == "" {
+			model = "haiku"
 		}
-		return "claude", args
+		return "claude", []string{"--model", model, "--system-prompt", systemPrompt, "-p", query}
 	case "gemini":
 		args := []string{"-p", systemPrompt + "\n\n" + query}
 		if model != "" {
@@ -237,7 +239,7 @@ func llmCommand(tool, model, systemPrompt, query string) (string, []string) {
 		args = append(args, systemPrompt+"\n\n"+query)
 		return "opencode", args
 	default:
-		args := []string{"--system-prompt", systemPrompt, "-p", query}
+		args := []string{"--exclude-tools", "edit,write", "--system-prompt", systemPrompt, "-p", query}
 		if model != "" {
 			args = append([]string{"--model", model}, args...)
 		}
