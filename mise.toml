@@ -1,0 +1,114 @@
+[settings]
+env_shell_expand = true
+
+[tools]
+go = "1.26"
+
+[env]
+GIT_VERSION = "{{ exec(command='git describe --tags --always --dirty 2>/dev/null || echo dev') }}"
+GIT_COMMIT = "{{ exec(command='git rev-parse --short HEAD 2>/dev/null || echo none') }}"
+
+[tasks.build]
+description = "Build looksy"
+run = "go build -ldflags \"-X main.version=$GIT_VERSION -X main.commit=$GIT_COMMIT\" -o looksy ."
+
+[tasks."build:linux"]
+description = "Build for Linux x64"
+env = { CGO_ENABLED = "1", GOOS = "linux", GOARCH = "amd64", CC = "${CC:-gcc}" }
+run = "bash scripts/build.sh"
+
+[tasks."build:linux-arm64"]
+description = "Build for Linux arm64 (requires aarch64-linux-gnu-gcc)"
+env = { CGO_ENABLED = "1", GOOS = "linux", GOARCH = "arm64", CC = "${CC:-aarch64-linux-gnu-gcc}" }
+run = "bash scripts/build.sh"
+
+[tasks."build:mac"]
+description = "Build for macOS arm64 (native on macOS runners; needs osxcross on Linux)"
+env = { CGO_ENABLED = "1", GOOS = "darwin", GOARCH = "arm64", CC = "${CC:-cc}" }
+run = "bash scripts/build.sh"
+
+[tasks."build:mac-x64"]
+description = "Build for macOS x64 (native on macOS runners; needs osxcross on Linux)"
+env = { CGO_ENABLED = "1", GOOS = "darwin", GOARCH = "amd64", CC = "${CC:-cc}" }
+run = "bash scripts/build.sh"
+
+[tasks."build:windows"]
+description = "Build for Windows x64 (requires x86_64-w64-mingw32-gcc on Linux)"
+env = { CGO_ENABLED = "1", GOOS = "windows", GOARCH = "amd64", CC = "${CC:-x86_64-w64-mingw32-gcc}" }
+run = "bash scripts/build.sh"
+
+[tasks."build:windows-arm64"]
+description = "Build for Windows arm64 (requires aarch64-w64-mingw32-gcc on Linux)"
+env = { CGO_ENABLED = "1", GOOS = "windows", GOARCH = "arm64", CC = "${CC:-aarch64-w64-mingw32-gcc}" }
+run = "bash scripts/build.sh"
+
+[tasks."build:all"]
+description = "Build all platform binaries"
+depends = ["build:linux", "build:linux-arm64", "build:mac", "build:mac-x64", "build:windows", "build:windows-arm64"]
+
+[tasks.release]
+description = "Create a GitHub release (usage: mise run release v1.0)"
+usage = '''
+arg "<version>"
+'''
+run = """
+VERSION="${usage_version}"
+echo "→ Tagging $VERSION"
+git tag "$VERSION"
+git push origin "$VERSION"
+echo "→ Creating release"
+gh release create "$VERSION" --title "$VERSION" --generate-notes
+echo "✓ Release $VERSION created — CI will build and attach binaries"
+"""
+
+[tasks."release:undo"]
+confirm = 'This will delete the GitHub release AND the git tag. Sure?'
+description = "Retract a release: deletes the GitHub release and tag (usage: mise run release:undo v1.0)"
+usage = '''
+arg "<version>"
+'''
+run = """
+VERSION="${usage_version}"
+echo "→ Deleting GitHub release $VERSION"
+gh release delete "$VERSION" --yes --cleanup-tag || true
+echo "→ Deleting remote tag"
+git push origin --delete "$VERSION" 2>/dev/null || true
+echo "→ Deleting local tag"
+git tag --delete "$VERSION" 2>/dev/null || true
+echo "✓ Release $VERSION retracted — you can re-run 'mise run release $VERSION' to retry"
+"""
+
+[tasks."release:retry"]
+description = "Retract and re-cut a release (usage: mise run release:retry v1.0)"
+usage = '''
+arg "<version>"
+'''
+run = """
+VERSION="${usage_version}"
+mise run release:undo "$VERSION"
+mise run release "$VERSION"
+"""
+
+[tasks.test]
+description = "Run all tests"
+run = "go test -cover ./... -v"
+
+[tasks.test-race]
+description = "Run all tests with race detector"
+run = "go test ./... -race"
+
+[tasks.lint]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.coverage]
+description = "Get a coverage report"
+run = """
+mkdir -p tmp
+go test -coverprofile=tmp/coverage.out ./... -v
+go tool cover -func=tmp/coverage.out
+"""
+
+[tasks.check]
+description = "Run lint and tests"
+depends = ["lint", "test"]
