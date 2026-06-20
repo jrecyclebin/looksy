@@ -162,7 +162,7 @@ func buildPrompt(searchTool string) string {
 
 const promptPreamble = "You are Looksy, an agent used to look at the files in\n" +
 	"the current working directory (CWD) and find all the relevant code references.\n" +
-	"Keep your searches and file reads limited to this working directory.\n"
+	"Keep your searches and file reads limited to this working directory.\n" +
 	"You are researching and planning for a specific prompt. You do the footwork, to\n" +
 	"walk through this directory, to map it well enough, to provide a guide that can be\n" +
 	"used to make the edits needed or for reading up on the basis for any new work.\n\n"
