@@ -125,7 +125,7 @@ func printHelp() {
 
 func cmdGo(llm, model, search string, queryArgs []string) {
 	if len(queryArgs) == 0 {
-    printHelp()
+		printHelp()
 		os.Exit(1)
 	}
 	query := strings.Join(queryArgs, " ")
@@ -162,7 +162,7 @@ func buildPrompt(searchTool string) string {
 
 const promptPreamble = "You are Looksy, an agent used to look at the files in\n" +
 	"the current working directory (CWD) and find all the relevant code references.\n" +
-  "You are researching and planning for a specific prompt. You do the footwork, to\n" +
+	"You are researching and planning for a specific prompt. You do the footwork, to\n" +
 	"walk through all the code, to map it well enough, to provide a guide that can be\n" +
 	"used to make the edits needed or for reading up on the basis for any new work.\n\n"
 
@@ -193,7 +193,7 @@ const searchSectionGrep = "Use grep for file searches. Some quick examples:\n\n"
 const promptPostamble = "Respond to the user's prompt with your findings, and include specific code\n" +
 	"references using the format `path/to/file.ext:line-range` — one per line,\n" +
 	"each optionally followed by a dash and a description. Surround them with a\n" +
-  "code block and keep them neatly arranged.\n\nFor example:\n\n" +
+	"code block and keep them neatly arranged.\n\nFor example:\n\n" +
 	"```\n" +
 	"handler.go:782-920 — `handleTaskExec` (full execution pipeline)\n" +
 	"handler.go:1978-2020 — `verifyTaskToken` (validates Bearer token)\n" +
@@ -205,8 +205,8 @@ const promptPostamble = "Respond to the user's prompt with your findings, and in
 	"mode for this - just grab the file references and make a list for me.\n"
 
 const actualPrompt = "Here is the prompt you are researching:\n\n" +
-  "PROMPT\n\n" +
-  "When you are done, reply with your findings and list of file references.\n"
+	"PROMPT\n\n" +
+	"When you are done, reply with your findings and list of file references.\n"
 
 // --- LLM invocation ---
 
@@ -223,7 +223,7 @@ func callLLM(tool, model, systemPrompt, query string) (string, error) {
 }
 
 func llmCommand(tool, model, systemPrompt, query string) (string, []string) {
-  blockquoted := "> " + strings.ReplaceAll(query, "\n", "\n> ")
+	blockquoted := "> " + strings.ReplaceAll(query, "\n", "\n> ")
 	fullPrompt := strings.Replace(actualPrompt, "PROMPT", blockquoted, 1)
 	switch tool {
 	case "claude":
@@ -287,9 +287,10 @@ func listModels(tool string) error {
 // --- Output processing (the spy logic) ---
 
 // refRe matches file references anywhere in a line, e.g.:
-//   main.go:77-90
-//   src/handler.go:42
-//   **`web/frbr.js:250-310`** - some description
+//
+//	main.go:77-90
+//	src/handler.go:42
+//	**`web/frbr.js:250-310`** - some description
 var refRe = regexp.MustCompile(`[\w./@-]+:\d+(-\d+)?`)
 
 func processOutput(w io.Writer, input string) {
