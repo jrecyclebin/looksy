@@ -1,14 +1,17 @@
 # Looksy
 
-A simple CLI tool to quickly research a task and give you PERFECT context.
+A simple CLI tool to quickly research a task and attempt to give you "perfect"
+context.
 
 How does it do this? It uses one of your existing tools (Claude, Pi, Opencode,
-etc) to investigate a coding task and asks for a list of code references —
+etc) to investigate a coding task and to assemble a list of code references —
 files and line number blocks.
 
-Looksy then reads those EXACT lines of code and expands them fully in its
-response. This means that the agent doing the coding can have the pieces it
-needs without a bunch of irrelevant code in the way.
+Looksy then takes the references list from the agent and reads those EXACT
+lines of code and expands them fully in its response. You're left with a big
+file that has all the specific chunks that are relevant to the task. You can
+hand this to an agent to do the work - or you can use it as a reference for
+building a plan.
 
 ```bash
 $ looksy "Add Codex support."
@@ -16,9 +19,15 @@ $ looksy "Add Codex support."
 **What needs to happen to add Codex support:**
 [...Steps the LLM suggests...]
 
-main.go:75-77 — `-l` flag definition with current help text
+**File references:**
+* main.go:75-77 — `-l` flag definition with current help text
+* main.go:207-240 — `llmCommand` with per-tool flag construction
 [...more references from the LLM...]
 
+---
+FILE REFERENCES
+All file content below is current - is the exact file data from each chunk.
+Provided here to limit the need for file reads.
 ---
 
 === main.go:75-77 — `-l` flag definition with current help text
