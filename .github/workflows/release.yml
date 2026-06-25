@@ -10,43 +10,34 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
+            target_os: linux
+            target_arch: amd64
             cc: gcc
-            ext: .tar.gz
             label: linux-x64
-            mise_task: build:linux
           - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
+            target_os: linux
+            target_arch: arm64
             cc: aarch64-linux-gnu-gcc
-            ext: .tar.gz
             label: linux-arm64
-            mise_task: build:linux-arm64
           - os: macos-14
-            goos: darwin
-            goarch: arm64
+            target_os: darwin
+            target_arch: arm64
             cc: cc
-            ext: .tar.gz
             label: macos-arm64
-            mise_task: build:mac
           - os: windows-latest
-            goos: windows
-            goarch: amd64
-            cc: gcc
-            ext: .zip
+            target_os: windows
+            target_arch: amd64
+            cc: "" # use V's bundled tcc on Windows x64
             label: windows-x64
-            mise_task: build:windows
           - os: windows-11-arm
-            goos: windows
-            goarch: arm64
+            target_os: windows
+            target_arch: arm64
             cc: clang
-            ext: .zip
             label: windows-arm64
-            mise_task: build:windows-arm64
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -54,37 +45,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@v4
+      - name: Install V
+        uses: vlang/setup-v@v1
+        with:
+          check-latest: true
 
       - name: Install Linux arm64 cross-compiler
-        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+        if: matrix.target_os == 'linux' && matrix.target_arch == 'arm64'
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Install MinGW (Windows x64 only)
-        if: matrix.goos == 'windows' && matrix.goarch == 'amd64'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          install: mingw-w64-x86_64-gcc
-          path-type: inherit
-
-      - name: Install MinGW (Windows arm64 only)
-        if: matrix.goos == 'windows' && matrix.goarch == 'arm64'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: clangarm64
-          update: true
-          install: mingw-w64-clang-aarch64-gcc
-
-      - name: Install zip
-        if: matrix.goos == 'windows'
+      - name: Install zip (Windows)
+        if: matrix.target_os == 'windows'
         run: choco install zip -y
         shell: powershell
 
       - name: Build & package
         shell: bash
-        run: mise run ${{ matrix.mise_task }}
+        run: bash scripts/build.sh
         env:
+          OS: ${{ matrix.target_os }}
+          ARCH: ${{ matrix.target_arch }}
           CC: ${{ matrix.cc }}
           VERSION: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
@@ -93,7 +73,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: looksy-${{ github.ref_name }}-${{ matrix.label }}
-          path: dist/looksy-${{ github.ref_name }}-${{ matrix.label }}${{ matrix.ext }}
+          path: dist/looksy-${{ github.ref_name }}-${{ matrix.label }}.*
 
   release:
     needs: build

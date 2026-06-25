@@ -2,45 +2,57 @@
 set -euo pipefail
 
 # ── Config from env (set by mise tasks or CI) ──────────────────────
-# Required: GOOS, GOARCH, VERSION, COMMIT
-# Optional: CC (defaults per platform below)
+# OS, ARCH select the cross-compilation target (default: current host).
+# CC selects the C compiler V shells out to (default: V's own choice).
+# VERSION, COMMIT default to the GIT_* values exported by mise.
 VERSION=${VERSION:-$GIT_VERSION}
 COMMIT=${COMMIT:-$GIT_COMMIT}
+OS=${OS:-$(uname -s)}
+ARCH=${ARCH:-$(uname -m)}
 
-# ── Derive architecture label ──────────────────────────────────────
-case "$GOARCH" in
-  amd64) arch="x64" ;;
-  arm64) arch="arm64" ;;
-  *)     arch="$GOARCH" ;;
+# ── Normalise OS to V's -os tokens ─────────────────────────────────
+case "$OS" in
+  linux | Linux)                    vos="linux";   oslabel="linux" ;;
+  darwin | Darwin | mac | macos)    vos="macos";   oslabel="macos" ;;
+  windows | Windows | *MINGW* | *MSYS*) vos="windows"; oslabel="windows" ;;
+  *) echo "unknown OS: $OS" >&2; exit 1 ;;
 esac
 
-# ── Derive binary name ────────────────────────────────────────────
-if [ "$GOOS" = "windows" ]; then
+# ── Normalise ARCH to V's -arch tokens plus a friendly label ───────
+case "$ARCH" in
+  amd64 | x86_64 | x64) varch="amd64"; arch="x64" ;;
+  arm64 | aarch64)      varch="arm64"; arch="arm64" ;;
+  *) echo "unknown ARCH: $ARCH" >&2; exit 1 ;;
+esac
+
+# ── Derive packaging details ───────────────────────────────────────
+label="${oslabel}-${arch}"
+if [ "$vos" = "windows" ]; then
   binary="looksy.exe"
+  ext=".zip"
 else
   binary="looksy"
+  ext=".tar.gz"
 fi
 
-# ── Build ──────────────────────────────────────────────────────────
-echo "→ Building $binary (GOOS=$GOOS GOARCH=$GOARCH CC=${CC:-default})"
-go build -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT" -o "dist/${GOOS}-${arch}-$binary" .
-
-# ── Package ────────────────────────────────────────────────────────
+# ── Build (V cross-compiles to the target via the chosen C compiler) ─
 staging="dist/staging"
 mkdir -p "$staging"
-mv "dist/${GOOS}-${arch}-$binary" "$staging/$binary"
 
-if [ "$GOOS" = "windows" ]; then
-  archive="looksy-${VERSION}-${GOOS}-${arch}.zip"
-  echo "→ Packaging $archive"
+cc_flag=()
+[ -n "${CC:-}" ] && cc_flag=(-cc "$CC")
+
+echo "→ Building $binary (os=$vos arch=$varch cc=${CC:-default})"
+v -prod -os "$vos" -arch "$varch" "${cc_flag[@]}" \
+  -d looksy_version="$VERSION" -d looksy_commit="$COMMIT" \
+  . -o "$staging/$binary"
+
+# ── Package ────────────────────────────────────────────────────────
+archive="looksy-${VERSION}-${label}${ext}"
+echo "→ Packaging $archive"
+if [ "$ext" = ".zip" ]; then
   (cd "$staging" && zip -r "../$archive" .)
 else
-  if [ "$GOOS" = "darwin" ]; then
-    archive="looksy-${VERSION}-macos-${arch}.tar.gz"
-  else
-    archive="looksy-${VERSION}-${GOOS}-${arch}.tar.gz"
-  fi
-  echo "→ Packaging $archive"
   tar -czf "dist/$archive" -C "$staging" .
 fi
 

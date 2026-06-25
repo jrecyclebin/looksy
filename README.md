@@ -20,8 +20,8 @@ $ looksy "Add Codex support."
 [...Steps the LLM suggests...]
 
 **File references:**
-* main.go:75-77 — `-l` flag definition with current help text
-* main.go:207-240 — `llmCommand` with per-tool flag construction
+* main.v:64-71 — flag parsing for `-l` / `-m` / `-s`
+* main.v:233-296 — `llm_command` with per-tool flag construction
 [...more references from the LLM...]
 
 ---
@@ -30,12 +30,17 @@ All file content below is current - is the exact file data from each chunk.
 Provided here to limit the need for file reads.
 ---
 
-=== main.go:75-77 — `-l` flag definition with current help text
-fs := flag.NewFlagSet("looksy", flag.ExitOnError)
-fs.StringVar(&flagLLM, "l", "", "LLM tool to use (pi, claude, gemini, ollama, opencode)")
-fs.StringVar(&flagModel, "m", "", "model name or alias to pass to the LLM tool")
+=== main.v:64-71 — flag parsing for `-l` / `-m` / `-s`
+mut fname := a
+mut fval := ''
+mut have_val := false
+if eq := a.index('=') {
+	fname = a[..eq]
+	fval = a[eq + 1..]
+	have_val = true
+}
 
-=== main.go:207-240 — `llmCommand` with per-tool flag construction
+=== main.v:233-296 — `llm_command` with per-tool flag construction
 [...expanded file contents...]
 
 [...3 other expanded references...]
@@ -127,6 +132,7 @@ Priority chain: **flag > env var > config.env > built-in default**.
 
 ## Building from Source
 
-Install [mise](https://mise.jdx.dev/installing-mise.html).
+Install [mise](https://mise.jdx.dev/installing-mise.html) — it'll fetch the V
+compiler for you from the `mise.toml` tool list.
 
-Then: `mise build`.
+Then: `mise run build`. (Run the tests with `mise run test`.)
